@@ -16,12 +16,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for app in /Applications/Xcode_26*.app; do
-            if [ -d "$app" ]; then
-              sudo xcode-select -s "$app/Contents/Developer"
-              break
-            fi
-          done
+          sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
           xcodebuild -version
           xcrun --sdk watchos --show-sdk-version
 
