@@ -70,9 +70,12 @@ struct BirthDateInputView: View {
 
 // MARK: - Previews
 
+#if DEBUG
+
 struct BirthDateInputView_Previews: PreviewProvider {
     static var previews: some View {
         BirthDateInputView()
             .environmentObject(RealHealthManager.preview())
     }
 }
+#endif
