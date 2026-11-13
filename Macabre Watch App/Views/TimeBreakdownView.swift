@@ -109,6 +109,8 @@ private struct GlassTimeUnit: View {
 
 // MARK: - Previews
 
+#if DEBUG
+
 struct TimeBreakdownView_Previews: PreviewProvider {
     static var previews: some View {
         TimeBreakdownView(
@@ -117,3 +119,4 @@ struct TimeBreakdownView_Previews: PreviewProvider {
         )
     }
 }
+#endif
