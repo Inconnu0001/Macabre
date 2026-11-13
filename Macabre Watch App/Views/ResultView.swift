@@ -122,6 +122,8 @@ struct MainCountView: View {
 
 // MARK: - Previews
 
+#if DEBUG
+
 struct ResultView_Previews: PreviewProvider {
     static var previews: some View {
         ResultView().environmentObject(RealHealthManager.preview())
@@ -137,3 +139,4 @@ struct MainCountView_Previews: PreviewProvider {
         )
     }
 }
+#endif
