@@ -1,0 +1,126 @@
+name: Build Macabre for Windows sideload (experimental)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Macabre
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26 and show version
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in /Applications/Xcode_26*.app; do
+            if [ -d "$app" ]; then
+              sudo xcode-select -s "$app/Contents/Developer"
+              break
+            fi
+          done
+          xcodebuild -version
+          xcrun --sdk watchos --show-sdk-version
+
+      - name: Compile original Macabre watchOS application (unsigned)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Macabre.xcodeproj \
+            -scheme 'Macabre Watch App' \
+            -configuration Release \
+            -destination 'generic/platform=watchOS' \
+            -derivedDataPath "$RUNNER_TEMP/MacabreDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build
+          WATCH_APP="$RUNNER_TEMP/MacabreDerivedData/Build/Products/Release-watchos/Macabre Watch App.app"
+          test -d "$WATCH_APP" || { echo 'Cannot find compiled Watch app'; exit 1; }
+          test -d "$WATCH_APP/PlugIns/Macabre Watch Widget.appex" || { echo 'Watch widget missing'; exit 1; }
+
+      - name: Create minimal iPhone bridge for Windows companion sideloaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/stage/Payload/MacabreBridge.app/Watch"
+          cp -R "$RUNNER_TEMP/MacabreDerivedData/Build/Products/Release-watchos/Macabre Watch App.app" \
+            "$RUNNER_TEMP/stage/Payload/MacabreBridge.app/Watch/"
+          cat > "$RUNNER_TEMP/bridge.m" <<'OBJC'
+          #import <UIKit/UIKit.h>
+          @interface MacabreBridgeDelegate : UIResponder <UIApplicationDelegate>
+          @property (strong, nonatomic) UIWindow *window;
+          @end
+          @implementation MacabreBridgeDelegate
+          - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
+              self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+              UIViewController *vc = [UIViewController new];
+              vc.view.backgroundColor = [UIColor systemBackgroundColor];
+              UILabel *label = [[UILabel alloc] initWithFrame:CGRectInset(vc.view.bounds, 20, 40)];
+              label.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+              label.numberOfLines = 0;
+              label.textAlignment = NSTextAlignmentCenter;
+              label.text = @"Macabre fonctionne sur votre Apple Watch. Cette application iPhone sert uniquement au transfert.";
+              [vc.view addSubview:label];
+              self.window.rootViewController = vc;
+              [self.window makeKeyAndVisible];
+              return YES;
+          }
+          @end
+          int main(int argc, char * argv[]) {
+              @autoreleasepool { return UIApplicationMain(argc, argv, nil, NSStringFromClass(MacabreBridgeDelegate.class)); }
+          }
+          OBJC
+          xcrun --sdk iphoneos clang \
+            -arch arm64 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -miphoneos-version-min=16.0 \
+            -fobjc-arc \
+            -framework UIKit -framework Foundation \
+            "$RUNNER_TEMP/bridge.m" \
+            -o "$RUNNER_TEMP/stage/Payload/MacabreBridge.app/MacabreBridge"
+          /usr/bin/python3 - <<'PY'
+          from pathlib import Path
+          import plistlib, os
+          app=Path(os.environ['RUNNER_TEMP'])/'stage/Payload/MacabreBridge.app'
+          host_id='armandwegnez.Macabre'
+          info={
+              'CFBundleDevelopmentRegion':'fr',
+              'CFBundleExecutable':'MacabreBridge',
+              'CFBundleIdentifier':host_id,
+              'CFBundleInfoDictionaryVersion':'6.0',
+              'CFBundleName':'MacabreBridge',
+              'CFBundleDisplayName':'Macabre',
+              'CFBundlePackageType':'APPL',
+              'CFBundleShortVersionString':'1.0',
+              'CFBundleVersion':'1',
+              'LSRequiresIPhoneOS':True,
+              'MinimumOSVersion':'16.0',
+              'UIDeviceFamily':[1],
+              'UISupportedInterfaceOrientations':['UIInterfaceOrientationPortrait'],
+          }
+          with open(app/'Info.plist','wb') as f: plistlib.dump(info,f)
+          watch_plist=app/'Watch/Macabre Watch App.app/Info.plist'
+          with open(watch_plist,'rb') as f: watch_info=plistlib.load(f)
+          watch_info.pop('WKWatchOnly',None)
+          watch_info['WKCompanionAppBundleIdentifier']=host_id
+          with open(watch_plist,'wb') as f: plistlib.dump(watch_info,f)
+          assert (app/'Watch/Macabre Watch App.app/PlugIns/Macabre Watch Widget.appex').exists()
+          print('Watch bundle:',watch_info.get('CFBundleIdentifier'))
+          print('Companion:',watch_info['WKCompanionAppBundleIdentifier'])
+          PY
+          cd "$RUNNER_TEMP/stage"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/Macabre-Windows-EXPERIMENTAL.ipa" Payload
+          /usr/bin/unzip -l "$GITHUB_WORKSPACE/Macabre-Windows-EXPERIMENTAL.ipa" | grep 'Watch/Macabre Watch App.app/Info.plist'
+
+      - name: Downloadable unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Macabre-Windows-EXPERIMENTAL
+          path: Macabre-Windows-EXPERIMENTAL.ipa
+          if-no-files-found: error
+          retention-days: 7
