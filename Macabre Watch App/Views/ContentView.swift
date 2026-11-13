@@ -28,9 +28,12 @@ struct ContentView: View {
 
 // MARK: - Previews
 
+#if DEBUG
+
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
             .environmentObject(RealHealthManager.preview())
     }
 }
+#endif
