@@ -75,7 +75,7 @@ jobs:
             -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
             -miphoneos-version-min=16.0 \
             -fobjc-arc \
-            -framework UIKit -framework Foundation \
+            -framework UIKit -framework Foundation -framework CoreGraphics \
             "$RUNNER_TEMP/bridge.m" \
             -o "$RUNNER_TEMP/stage/Payload/MacabreBridge.app/MacabreBridge"
           /usr/bin/python3 - <<'PY'
