@@ -2,6 +2,10 @@ name: Build Macabre for Windows sideload (experimental)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-macabre-windows.yml'
 
 jobs:
   build:
